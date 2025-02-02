@@ -63,10 +63,9 @@ typedef struct INA219_Device_s {
     INA219_Settings settings; /* Device settings */
 } INA219_Device_t;
 
-
 INA219_Device_t INA219_NewDevice(uint8_t chip_id, void *intf, INA219_Read_t read, INA219_Write_t write, INA219_Settings settings);
-int16_t INA219_ReadRegister(INA219_Device_t *dev, uint8_t reg, int8_t *pRxBuffer, uint8_t len);
-int16_t INA219_WriteRegister(INA219_Device_t *dev, uint8_t reg, int8_t *pTxBuffer, uint8_t len);
+int8_t INA219_ReadRegister(INA219_Device_t *dev, uint8_t reg, int8_t *pRxBuffer, uint8_t len);
+int8_t INA219_WriteRegister(INA219_Device_t *dev, uint8_t reg, int8_t *pTxBuffer, uint8_t len);
 int16_t INA219_Read16BitRegister(INA219_Device_t *dev, uint8_t reg, int16_t *pRxBuffer);
 void INA219_Write16BitRegister(INA219_Device_t *dev, uint8_t reg, int16_t value);
 void INA219_SetBusVoltage(INA219_Device_t *dev, BusVoltageRange_e range);

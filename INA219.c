@@ -93,14 +93,14 @@ int16_t INA219_WriteRegister(INA219_Device_t *dev, uint8_t reg, int8_t *pTxBuffe
 // Sets the bus voltage range
 void INA219_SetBusVoltage(INA219_Device_t *dev, BusVoltageRange_e range)
 {
-    uint16_t reg = 0;
-    INA219_Read16BitRegister(dev, REG_CONFIG, &reg);
+    uint16_t buffer = 0;
+    INA219_ReadRegister(dev, REG_CONFIG, (uint8_t*)&buffer, 2);
 
-    reg &= 0b1101111111111111;
-    reg |= (uint16_t)range << 13;
-    INA219_Write16BitRegister(dev, REG_CONFIG, reg);
-
+    buffer &= 0b1101111111111111;
+    buffer |= (uint16_t)range << 13;
     dev->settings.bus_voltage_range = range;
+
+    INA219_WriteRegister(dev, REG_CONFIG, (uint8_t*)&buffer, 2);
 }
 
 // Sets the gain for shunt voltage measurement
