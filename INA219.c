@@ -6,8 +6,10 @@
  */
 
 #include "INA219.h"
+#include <math.h>
+#include "main.h"
 
-// INA219 Register Addresses
+
 #define REG_CONFIG 0x00
 #define REG_SHUNTVOLTAGE 0x01
 #define REG_BUSVOLTAGE 0x02
@@ -15,166 +17,162 @@
 #define REG_CURRENT 0x04
 #define REG_CALIBRATION 0x05
 
-// Initializes a new INA219 device structure
-INA219_Device_t INA219_NewDevice(uint8_t chip_id, void *intf, INA219_Read_t read, INA219_Write_t write, INA219_Settings settings)
+INA219_Device_t INA219_NewDevice(uint8_t chip_id, float r_shunt, float max_current,  void *intf, INA219_Read_t read, INA219_Write_t write)
 {
     INA219_Device_t dev;
     dev.chip_id = chip_id;
+    dev.r_shunt = r_shunt;
+    dev.max_current = max_current;
     dev.intf = intf;
     dev.read = read;
     dev.write = write;
-    dev.settings = settings;
+
+    INA219_SetLsb(&dev);
 
     return dev;
 }
 
-// Sets the device configuration settings
-void INA219_SetSettings(INA219_Device_t *dev, BusVoltageRange_e bus_voltage_range, Gain_e gain,
-                        ADCResolution_e bus_adc_resolution, ADCResolution_e shunt_adc_resolution,
-                        OperatingMode_e mode, float current_lsb, float power_lsb)
+int8_t INA219_ReadRegister(INA219_Device_t *dev, uint8_t reg, uint16_t *pRxBuffer)
 {
-    dev->settings.bus_voltage_range = bus_voltage_range;
-    dev->settings.gain = gain;
-    dev->settings.bus_adc_resolution = bus_adc_resolution;
-    dev->settings.shunt_adc_resolution = shunt_adc_resolution;
-    dev->settings.mode = mode;
-    dev->settings.current_lsb = current_lsb;
-    dev->settings.power_lsb = power_lsb;
-}
-
-// Applies the settings to the device
-void INA219_SetConfiguration(INA219_Device_t *dev)
-{
-    INA219_SetBusVoltage(dev, dev->settings.bus_voltage_range);
-    INA219_SetGain(dev, dev->settings.gain);
-    INA219_SetBusAdcResolution(dev, dev->settings.bus_adc_resolution);
-    INA219_SetShuntAdcResolution(dev, dev->settings.shunt_adc_resolution);
-    INA219_SetMode(dev, dev->settings.mode);
+	uint8_t buffer[2];
+    int8_t status = dev->read(dev->intf, reg, buffer, 2);
+    *pRxBuffer = buffer[0] << 8 | buffer[1];
+    return status;
 }
 
 
-// Reads a register from the device
-int16_t INA219_ReadRegister(INA219_Device_t *dev, uint8_t reg, int8_t *pRxBuffer, uint8_t len)
+int8_t INA219_WriteRegister(INA219_Device_t *dev, uint8_t reg, uint16_t *pTxBuffer)
 {
-    return dev->read(dev->intf, reg, pRxBuffer, len);
+	uint8_t buffer[2];
+	buffer[0] = (uint8_t)(*pTxBuffer >> 8);
+	buffer[1] = (uint8_t) *pTxBuffer;
+    int8_t status = dev->write(dev->intf, reg, buffer, 2);
+	return status;
 }
 
-// Writes to a register in the device
-int16_t INA219_WriteRegister(INA219_Device_t *dev, uint8_t reg, int8_t *pTxBuffer, uint8_t len)
-{
-    return dev->write(dev->intf, reg, pTxBuffer, len);
-}
 
-// Sets the bus voltage range
-void INA219_SetBusVoltage(INA219_Device_t *dev, BusVoltageRange_e range)
+
+void INA219_SetBusVoltage(INA219_Device_t *dev, INA219_BusVoltageRange_e range)
 {
     uint16_t buffer = 0;
-    INA219_ReadRegister(dev, REG_CONFIG, (uint8_t*)&buffer, 2);
+    INA219_ReadRegister(dev, REG_CONFIG, &buffer);
 
     buffer &= 0b1101111111111111;
     buffer |= (uint16_t)range << 13;
     dev->settings.bus_voltage_range = range;
-
-    INA219_WriteRegister(dev, REG_CONFIG, (uint8_t*)&buffer, 2);
+    INA219_WriteRegister(dev, REG_CONFIG, &buffer);
 }
 
-// Sets the gain for shunt voltage measurement
-void INA219_SetGain(INA219_Device_t *dev, Gain_e range)
+void INA219_SetGain(INA219_Device_t *dev, INA219_Gain_e range)
 {
-    uint16_t reg = 0;
-    INA219_ReadRegister(dev, REG_CONFIG, (uint8_t*)&buffer,2);
+    uint16_t buffer = 0;
+    INA219_ReadRegister(dev, REG_CONFIG, &buffer);
 
     buffer &= 0b1110011111111111;
     buffer |= (uint16_t)range << 11;
     dev->settings.gain = range;
 
-    INA219_WriteRegister(dev, REG_CONFIG, (uint8_t*)&buffer,2);
+    INA219_WriteRegister(dev, REG_CONFIG, &buffer);
 }
 
-// Sets the ADC resolution for bus voltage
-void INA219_SetBusAdcResolution(INA219_Device_t *dev, ADCResolution_e range)
+void INA219_SetBusAdcResolution(INA219_Device_t *dev, INA219_ADCResolution_e range)
 {
     uint16_t buffer = 0;
-    INA219_ReadRegister(dev, REG_CONFIG,(uint8_t*)&buffer,2);
+    INA219_ReadRegister(dev, REG_CONFIG, &buffer);
 
-    reg &= 0b1111100001111111;
-    reg |= (uint16_t)range << 7;
+    buffer &= 0b1111100001111111;
+    buffer |= (uint16_t)range << 7;
     dev->settings.bus_adc_resolution = range;
 
-    INA219_WriteRegister(dev, REG_CONFIG, (uint8_t*)&buffer,2);
+    INA219_WriteRegister(dev, REG_CONFIG, &buffer);
 
 }
 
-// Sets the ADC resolution for shunt voltage
-void INA219_SetShuntAdcResolution(INA219_Device_t *dev, ADCResolution_e range)
+void INA219_SetShuntAdcResolution(INA219_Device_t *dev, INA219_ADCResolution_e range)
 {
     uint16_t buffer = 0;
-    INA219_ReadRegister(dev, REG_CONFIG,(uint8_t*)&buffer,2);
+    INA219_ReadRegister(dev, REG_CONFIG, &buffer);
 
-    reg &= 0b1111111110000111;
-    reg |= (uint16_t)range << 3;
+    buffer &= 0b1111111110000111;
+    buffer |= (uint16_t)range << 3;
     dev->settings.shunt_adc_resolution = range;
 
-    INA219_WriteRegister(dev, REG_CONFIG, (uint8_t*)&buffer,2);
+    INA219_WriteRegister(dev, REG_CONFIG, &buffer);
 }
 
 
 
-// Sets the device operating mode
-void INA219_SetMode(INA219_Device_t *dev, OperatingMode_e range)
+void INA219_SetMode(INA219_Device_t *dev, INA219_OperatingMode_e range)
 {
     uint16_t buffer = 0;
-    INA219_ReadRegister(dev, REG_CONFIG,(uint8_t*)&buffer,2);
+    INA219_ReadRegister(dev, REG_CONFIG, &buffer);
 
-    reg &= 0b1111111111111000;
-    reg |= (uint16_t)range;
+    buffer &= 0b1111111111111000;
+    buffer |= (uint16_t)range;
     dev->settings.mode = range;
 
-    INA219_WriteRegister(dev, REG_CONFIG, (uint8_t*)&buffer,2);
+    INA219_WriteRegister(dev, REG_CONFIG, &buffer);
 }
 
 
-// Calculates and sets LSB values
 void INA219_SetLsb(INA219_Device_t *dev)
 {
-    dev->settings.current_lsb = dev->max_current / 32768.0;
-    dev->settings.power_lsb = 20 * dev->settings.current_lsb;
+    dev->current_lsb = 0.0001;
+    dev->power_lsb = 20 * dev->current_lsb;
 }
 
-
-// Writes the calibration register
 void INA219_CalibReg(INA219_Device_t *dev)
 {
-    float current_lbs = dev->max_current / 32768.0;
-    uint16_t calib = (uint16_t)(0.04096 / (current_lbs * dev->r_shunt));
-    INA219_WriteRegister(dev, REG_CALIBRATION, (uint8_t*)&calib,2);
-
+    uint16_t calib = (uint16_t)round(0.04096 / (dev->current_lsb * dev->r_shunt));
+    INA219_WriteRegister(dev, REG_CALIBRATION, &calib);
 }
 
 
-// Reads and calculates current in amperes
-float INA219_CurrentAmper(INA219_Device_t *dev)
+int8_t INA219_ReadBusVoltage(INA219_Device_t *dev, float *pRxBuffer)
 {
-    int16_t current_register = 0;
-    INA219_ReadRegister(dev, REG_CURRENT, (uint8_t*)&current_register,2);
-    return (float)current_register * dev->settings.current_lsb;
+    uint16_t raw_voltage = 0;
+    int8_t status = INA219_ReadRegister(dev, REG_BUSVOLTAGE, &raw_voltage);
+    raw_voltage >>= 3;
+    *pRxBuffer = raw_voltage * 4.0 * 0.001;
+    return status;
 }
 
 
-// Reads and calculates power in watts
-float INA219_PowerWatt(INA219_Device_t *dev)
+int8_t INA219_ReadShuntVoltage(INA219_Device_t *dev, float *pRxBuffer)
 {
-    int16_t power_register = 0;
-    INA219_ReadRegister(dev, REG_POWER, (uint8_t*)&power_register,2);
-    return (float)power_register * dev->settings.power_lsb;
+	uint16_t raw_voltage = 0;
+	int8_t status = INA219_ReadRegister(dev, REG_SHUNTVOLTAGE, &raw_voltage);
+	*pRxBuffer = raw_voltage * 0.01;
+	return status;  //in milivolts
 }
 
 
-// Resets the INA219 device
+int8_t INA219_ReadCurrentAmper(INA219_Device_t *dev, float *pRxBuffer)
+{
+    uint16_t current_register = 0;
+    int8_t status = INA219_ReadRegister(dev, REG_CURRENT, &current_register);
+    *pRxBuffer = ((float)current_register * dev->current_lsb) * 1000;  //miliamper
+    return status;
+}
+
+int8_t INA219_ReadPowerWatt(INA219_Device_t *dev, float *pRxBuffer)
+{
+    uint16_t power_register = 0;
+    int8_t status = INA219_ReadRegister(dev, REG_POWER, &power_register);
+    *pRxBuffer = (float)power_register * dev->power_lsb;
+    return status;
+}
+
+
 void INA219_Reset(INA219_Device_t *dev)
 {
     uint16_t buffer = 0;
-    INA219_ReadRegister(dev, REG_CONFIG, (uint8_t*)&buffer,2);
-    reg |= 0x8000;
-    INA219_WriteRegister(dev, REG_CONFIG, (uint8_t*)&buffer,2);
+    INA219_ReadRegister(dev, REG_CONFIG, &buffer);
+    buffer |= 0x8000;
+    INA219_WriteRegister(dev, REG_CONFIG, &buffer);
 }
+
+
+
+
+
